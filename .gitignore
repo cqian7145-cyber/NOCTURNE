@@ -1,0 +1,14 @@
+node_modules/
+dist/
+playwright-report/
+test-results/
+coverage/
+*.local
+
+.env
+.env.*
+!.env.example
+*.sqlite
+*.sqlite-*
+NOCTURNE-*.json
+NOCTURNE*.zip
