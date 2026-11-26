@@ -78,6 +78,8 @@ export default defineConfig({
       output: {
         codeSplitting: {
           groups: [
+            { name:'math',test:/[\\/]node_modules[\\/]katex[\\/]/ },
+            { name:'markdown',test:/[\\/]node_modules[\\/](marked|highlight.js|dompurify)[\\/]/ },
             { name: 'react', test: /[\\/]node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/ },
             { name: 'motion', test: /[\\/]node_modules[\\/](motion|motion-dom|motion-utils|framer-motion)[\\/]/ },
             { name: 'journal', test: /[\\/]node_modules[\\/](dexie|zod)[\\/]/ },

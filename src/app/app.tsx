@@ -2,7 +2,7 @@ import { CommandCenter } from '../ui/command';
 import { repository } from '../core/repository';
 import { timerRunning } from '../core/focus';
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { BarChart3, CalendarDays, Ellipsis, FileText, LayoutGrid, Settings, Target, Timer, Layers3, BookOpen, PanelLeftClose, PanelLeftOpen, type LucideIcon } from 'lucide-react';
+import { Brain, BarChart3, CalendarDays, Ellipsis, FileText, LayoutGrid, Settings, Target, Timer, Layers3, BookOpen, PanelLeftClose, PanelLeftOpen, type LucideIcon } from 'lucide-react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Link, Navigate, NavLink, Route, Routes, useLocation } from 'react-router';
 import { modes } from '../core/model';
@@ -11,6 +11,7 @@ import { HabitEditorProvider } from '../ui/habits';
 import { Dialog, ease, timing } from '../ui/primitives';
 import { JournalProvider, timerLabel, useJournal, useNow } from './journal';
 
+const Memoria = lazy(() => import('../pages/memoria').then(module=>({default:module.Memoria})));
 const Analytics = lazy(() => import('../pages/analytics').then(module => ({ default: module.Analytics })));
 const Calendar = lazy(() => import('../pages/calendar').then(module => ({ default: module.Calendar })));
 const Focus = lazy(() => import('../pages/focus').then(module => ({ default: module.Focus })));
@@ -21,6 +22,7 @@ const Domains = lazy(() => import('../pages/domains').then(module => ({ default:
 const Chronicle = lazy(() => import('../pages/chronicle').then(module => ({ default: module.Chronicle })));
 const pages: { path: string; label: string; short: string; icon: LucideIcon; Component: React.ComponentType; mobile?: boolean }[] = [
   { path: '/', label: '今日总览', short: '今日', icon: LayoutGrid, Component: Dashboard, mobile: true },
+  { path: '/memoria/*', label: 'MEMORIA 知识', short: '知识', icon: Brain, Component: Memoria },
   { path: '/calendar', label: '日历', short: '日历', icon: CalendarDays, Component: Calendar, mobile: true },
   { path: '/analytics', label: '数据洞察', short: '洞察', icon: BarChart3, Component: Analytics, mobile: true },
   { path: '/domains', label: '人生领域', short: '领域', icon: Layers3, Component: Domains },
@@ -54,7 +56,7 @@ function Sidebar() {
   return <aside className="sidebar">
     <Brand />
     <nav aria-label="主导航" className="desktop-nav">
-      {pages.map(({ path, label, icon: Icon }) => <NavLink to={path} key={path} end className="nav-link" aria-label={label} title={label}>
+      {pages.map(({ path, label, icon: Icon }) => <NavLink to={path.replace('/*','')} key={path} end={path!=='/memoria/*'} className="nav-link" aria-label={label} title={label}>
         {({ isActive }) => <>
           {isActive && <motion.span className="nav-active" layoutId={reduced ? undefined : 'active-nav'}
             transition={{ duration: reduced ? 0 : timing.normal, ease }} aria-hidden />}
@@ -117,11 +119,11 @@ function Shell() {
       <Sidebar />
       <header className="mobile-brand"><Brand /></header>
       <main className="main" ref={main} id="main" tabIndex={-1}>
-        <CommandCenter pages={pages} />
+        <CommandCenter pages={pages.map(p=>({...p,path:p.path.replace('/*','')}))} />
         <AnimatePresence initial={false} mode="wait">
           <motion.div className="route" key={location.pathname}
             initial={reduced ? false : { opacity: 0, y: 7 }} animate={{ opacity: 1, y: 0 }}
-            exit={reduced ? undefined : { opacity: 0, y: -3, transition: { duration: timing.quick } }}
+            exit={reduced ? undefined : { opacity: 0, y: -3, pointerEvents: 'none', transition: { duration: timing.quick } }}
             transition={{ duration: reduced ? 0 : timing.normal, ease }}>
             <Suspense fallback={<div className="panel" role="status">正在打开页面…</div>}><Routes location={location}>
               {pages.map(({ path, Component }) => <Route key={path} path={path} element={<Component />} />)}

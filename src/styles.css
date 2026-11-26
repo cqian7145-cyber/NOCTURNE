@@ -787,3 +787,5 @@ body:has(dialog[open]) { overflow: hidden; }
 .chronicle-scroll .chronicle-list li { height: 98px; min-height: 98px; padding-block: 9px; content-visibility: visible; }
 .chronicle-list h3, .chronicle-list p { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; overflow: hidden; }
 .chronicle-list h3 { -webkit-line-clamp: 2; }
+
+.memory-dashboard{border:1px solid #34343c;background:linear-gradient(125deg,#1c1914,#141417);padding:23px 27px;margin:24px 0;border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:20px}.memory-dashboard h2{font:22px Georgia,serif;margin:0 0 7px}.memory-dashboard p{margin:0;color:#aaa;font-size:13px}@media(max-width:600px){.memory-dashboard{align-items:flex-start;flex-direction:column}}

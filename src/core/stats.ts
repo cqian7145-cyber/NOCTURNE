@@ -79,7 +79,7 @@ export function heatLevel(row: DayStat, today: string) {
   return 'level-' + (row.done === row.planned ? 5 : Math.ceil((row.done / row.planned) * 4));
 }
 
-export function makeStats(data: Snapshot, today: string) {
+export function makeStats(data: Snapshot, today: string, learning:Record<string,number|null>={}) {
   const entries = new Map(data.entries.map(entry => [entryKey(entry), entry]));
   const habits = [...data.habits].sort((a, b) => a.sortOrder - b.sortOrder);
   const earliest = habits.reduce((date, habit) => minDay(date, habit.revisions[0].effective), today);
@@ -132,7 +132,7 @@ export function makeStats(data: Snapshot, today: string) {
     const linked = habits.filter(h => goal.habitIds.includes(h.id));
     const rows = range(goal.startDate, goal.endDate ?? today, linked);
     const summary = summarize(rows);
-    const value = goal.goalType === 'count' ? summary.done : goal.goalType === 'streak' ? streak(rows, today).longest : summary.rate;
+    const value = ['studyMinutes','reviews','matureCards','recallRate'].includes(goal.goalType) ? learning[goal.id]??null : goal.goalType === 'count' ? summary.done : goal.goalType === 'streak' ? streak(rows, today).longest : summary.rate;
     const actionProgress = Math.min(100, (value ?? 0) / goal.targetValue * 100);
     const milestones = goal.milestones ?? [];
     const marked = milestones.filter(item => item.doneOn && item.doneOn <= today).length;
@@ -146,7 +146,7 @@ export function makeStats(data: Snapshot, today: string) {
     const upcoming = goal.startDate > today;
     let status = '进行中';
     if (upcoming) status = '待开始';
-    else if (reached) status = goal.goalType === 'completionRate' && !expired ? '暂达标' : '达成';
+    else if (reached) status = ['completionRate','recallRate'].includes(goal.goalType) && !expired ? '暂达标' : '达成';
     else if (expired) status = '已截止';
     else if (blocked) status = '等待前置目标';
     return { value, status, progress, summary };

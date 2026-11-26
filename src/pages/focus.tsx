@@ -1,3 +1,5 @@
+import {memoria,useQuery} from '../app/memoria';
+import {useNavigate} from 'react-router';
 import { isWork } from '../core/growth';
 import { useSearchParams } from 'react-router';
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
@@ -15,6 +17,9 @@ export function Focus() {
   const [minutes, setMinutes] = useState<number>(modeMinutes.focus);
   const [query] = useSearchParams();
   const [habit, setHabit] = useState(query.get('habit') ?? '');
+  const navigate=useNavigate();
+  const {value:memory}=useQuery(()=>memoria.overview());
+  const [deckId,setDeckId]=useState(''),[nodeId,setNodeId]=useState('');
   const [task, setTask] = useState('');
   const [goal, setGoal] = useState(query.get('goal') ?? '');
   const [immersive, setImmersive] = useState(false);
@@ -69,7 +74,7 @@ export function Focus() {
   async function start(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
-    await commit(() => repository.startTimer(mode, minutes, workMode && habit ? habit : undefined, workMode ? { task, goalId: goal || undefined } : undefined));
+    await commit(() => repository.startTimer(mode, minutes, workMode && habit ? habit : undefined, workMode ? { task, goalId: goal || undefined,deckId:deckId||undefined,nodeId:nodeId||undefined } : undefined));
     setBusy(false);
   }
 
@@ -117,9 +122,11 @@ export function Focus() {
               <RotateCcw size={16} aria-hidden />重置
             </button>
           </div>
+          {(timer.deckId||timer.nodeId)&&<button className="button secondary" onClick={()=>void commit(async()=>{const s=await memoria.startSession('focus',timer.deckId,timer.nodeId,false,timer.id);navigate('/memoria/recall?session='+s.id);})}>在本次专注中复习</button>}
           <p className="field-note">{timer.mode !== 'stopwatch' && currentMinutes + ' 分钟'}{timer.task && ' · ' + timer.task}{timer.habitId && ' · ' + (stats.habits.find(item => item.id === timer.habitId)?.name ?? '')}</p>
         </> : <form onSubmit={start} className="timer-setup">
           <div className="form-grid">
+            {workMode&&<><Field label="学习卡组"><select value={deckId} onChange={e=>setDeckId(e.target.value)}><option value="">不关联</option>{memory?.decks.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></Field><Field label="知识节点"><select value={nodeId} onChange={e=>setNodeId(e.target.value)}><option value="">不关联</option>{memory?.nodes.filter(n=>!n.trashed).map(n=><option key={n.id} value={n.id}>{n.title}</option>)}</select></Field></>}
             {mode !== 'stopwatch' && <Field label="时长（分钟）"><input type="number" min="1" max="180" required value={minutes || ''}
               onChange={event => setMinutes(Number(event.target.value))} /></Field>}
             {workMode && <Field label="关联习惯（可选）"><select value={habit} onChange={event => setHabit(event.target.value)}>

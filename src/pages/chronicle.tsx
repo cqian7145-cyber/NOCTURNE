@@ -1,3 +1,4 @@
+import {StudyMilestones} from '../ui/memory-integration';
 import { useMemo, useState } from 'react';
 import { BookOpen, Flag, Plus, Timer, Check, Pencil } from 'lucide-react';
 import { useJournal } from '../app/journal';
@@ -44,6 +45,7 @@ export function Chronicle() {
     <section className="panel chronicle-hero"><div><span className="range-caption">{year} 年成长档案</span><h2 lang="en">The Becoming.</h2></div>
       <dl className="growth-metrics"><div><dt>完成率</dt><dd>{pct(totals.rate)}</dd></div><div><dt>专注小时</dt><dd>{(minutes / 60).toFixed(1)}</dd></div>
         <div><dt>新建目标</dt><dd>{goals.length}</dd></div></dl></section>
+    <StudyMilestones/>
     <div className="growth-filters">
       <Field label="档案年份"><select value={year} onChange={event => { setYear(event.target.value); setTop(0); }}>{years.map(value => <option key={value}>{value}</option>)}</select></Field>
       <DomainSelect value={area} change={value => { setArea(value); setTop(0); }} />

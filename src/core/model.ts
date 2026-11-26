@@ -6,7 +6,7 @@ export const categories = ['学习', '健康', '创作', '生活'] as const;
 export const colors = ['lilac', 'sage', 'amber', 'blue', 'rose'] as const;
 export const icons = ['book', 'code', 'dumbbell', 'moon', 'leaf', 'pen', 'globe', 'spark'] as const;
 export const schedules = { daily: '每天', weekdays: '工作日', weekends: '周末', custom: '自定义' } as const;
-export const goalTypes = { count: '累计打卡', completionRate: '周期完成率', streak: '连续计划日' } as const;
+export const goalTypes = { count: '累计打卡', completionRate: '周期完成率', streak: '连续计划日', studyMinutes:'学习时长', reviews:'正式复习次数', matureCards:'当前成熟卡片', recallRate:'实际回忆率' } as const;
 export const modes = { focus: '专注', short: '短休息', long: '长休息', stopwatch: '正计时' } as const;
 export const modeMinutes = { focus: 25, short: 5, long: 15, stopwatch: 0 } as const;
 
@@ -50,12 +50,12 @@ const habit = habitFields.extend({
   id, revisions: z.array(interval).min(1).max(3000), sortOrder: z.number().int().nonnegative(),
   archivedAt: instant.optional(), createdAt: instant, updatedAt: instant,
 }).refine(h => h.revisions.every((r, i, all) => i === 0 || all[i - 1].effective < r.effective), '计划版本必须按日期递增');
-const entry = z.object({ habitId: id, date: day, completed: z.boolean(), quantity: z.number().positive().max(1_000_000).optional(), skipReason: z.string().trim().min(1).max(160).optional(), createdAt: instant, updatedAt: instant });
+const entry = z.object({ habitId: id, date: day, completed: z.boolean(), source: z.enum(['manual','memoria']).optional(), quantity: z.number().positive().max(1_000_000).optional(), skipReason: z.string().trim().min(1).max(160).optional(), createdAt: instant, updatedAt: instant });
 const focusMode = z.enum(['focus', 'short', 'long', 'stopwatch']);
-const goalType = z.enum(['count', 'completionRate', 'streak']);
+const goalType = z.enum(['count', 'completionRate', 'streak','studyMinutes','reviews','matureCards','recallRate']);
 const seconds = z.number().int().min(1).max(86_400);
 const epoch = z.number().int().min(0).max(8_640_000_000_000_000);
-const sessionLinks = { goalId: id.optional(), domainId: id.optional(), task: z.string().trim().max(120).optional() };
+const sessionLinks = { deckId: id.optional(), nodeId: id.optional(), goalId: id.optional(), domainId: id.optional(), task: z.string().trim().max(120).optional() };
 const timer = z.object({
   ...sessionLinks, elapsedMs: z.number().int().min(0).max(86_400_000).optional(), runningSince: epoch.optional(),
   id, mode: focusMode, habitId: id.optional(), startedAt: epoch,
@@ -69,11 +69,12 @@ const session = z.object({
 }).refine(s => s.endedAt >= s.startedAt && s.actualSeconds <= s.plannedSeconds, '会话时长无效');
 const goalFields = z.object({
   title: z.string().trim().min(1).max(90), description: z.string().trim().max(400),
-  habitIds: z.array(id).min(1).max(250).refine(ids => new Set(ids).size === ids.length),
+  studyDeckId: z.string().regex(/^[\w-]{1,120}$/).optional(),
+  habitIds: z.array(id).min(0).max(250).refine(ids => new Set(ids).size === ids.length),
   domainId: id.optional(), parentId: id.optional(), dependencies: z.array(id).max(100).optional(),
   milestones: z.array(milestoneSchema).max(100).optional(),
   goalType, targetValue: z.number().int().min(1).max(100_000), startDate: day, endDate: day.optional(),
-}).refine(g => (!g.endDate || g.endDate >= g.startDate) &&
+}).refine(g=>!['count','completionRate','streak'].includes(g.goalType)||g.habitIds.length>0,'请至少关联一项习惯').refine(g=>g.goalType!=='recallRate'||g.targetValue<=100,'回忆率不能超过 100').refine(g => (!g.endDate || g.endDate >= g.startDate) &&
   (g.goalType !== 'completionRate' || (g.targetValue <= 100 && !!g.endDate)), '请检查目标值和截止日期');
 const goal = goalFields.safeExtend({ id, createdAt: instant, updatedAt: instant });
 const review = z.object({
@@ -179,7 +180,7 @@ export function parseBackup(text: string) {
   if (text.length > 80_000_000) throw new Error('备份文件过大。');
   let parsed: unknown;
   try { parsed = JSON.parse(text); } catch { throw new Error('请选择有效的 JSON 备份。'); }
-  const result = snapshotSchema.safeParse(parsed);
+  const result = snapshotSchema.safeParse(typeof parsed === 'object' && parsed !== null && 'version' in parsed && parsed.version === 3 && 'journal' in parsed ? parsed.journal : parsed);
   if (!result.success) throw new Error('备份无法导入：' + result.error.issues[0].message);
   return result.data;
 }

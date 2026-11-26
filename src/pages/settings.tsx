@@ -1,10 +1,11 @@
+import {parseFull,type FullBackup} from '../core/memoria/exchange';
 import { decryptBackup, encryptBackup, isEncrypted } from '../core/encryption';
 import { InstallPanel } from '../ui/install';
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
 import { Archive, ArrowDown, ArrowUp, Bell, Download, HardDrive, Pencil, Plus, RotateCcw, Trash2, Upload } from 'lucide-react';
 import { notificationPermission, useJournal } from '../app/journal';
 import { systemZone } from '../core/dates';
-import { parseBackup, type Habit, type Settings, type Snapshot } from '../core/model';
+import { type Habit, type Settings } from '../core/model';
 import { repository } from '../core/repository';
 import { frequencyLabel, HabitIcon, useHabitEditor } from '../ui/habits';
 import { Dialog, Empty, Field, IconButton, PageHeading, PanelHeading } from '../ui/primitives';
@@ -150,7 +151,8 @@ function Preferences() {
 
 function Backup({ exportData }: { exportData: (password?: string) => Promise<void> }) {
   const { commit, notify, reduced } = useJournal();
-  const [incoming, setIncoming] = useState<{ name: string; snapshot: Snapshot }>();
+  const [incoming, setIncoming] = useState<{ name: string; snapshot: FullBackup }>();
+  const [historyChoice,setHistoryChoice]=useState<'local'|'incoming'>();
   const [mode, setMode] = useState<'merge' | 'replace'>('merge');
   const [confirmation, setConfirmation] = useState<'replace' | 'clear'>();
   const [word, setWord] = useState('');
@@ -173,7 +175,7 @@ function Backup({ exportData }: { exportData: (password?: string) => Promise<voi
       const text = await file.text();
       setError(''); setPassword('');
       if (isEncrypted(text)) setEncrypted({ name: file.name, text });
-      else setIncoming({ name: file.name, snapshot: parseBackup(text) });
+      else setIncoming({ name: file.name, snapshot: parseFull(text) });
     } catch (error) {
       notify(error instanceof Error ? error.message : '无法读取备份。', 'error');
     } finally {
@@ -185,7 +187,7 @@ function Backup({ exportData }: { exportData: (password?: string) => Promise<voi
     if (!incoming) return;
     setBusy(true);
     setError('');
-    if (await commit(() => repository.restore(incoming.snapshot, mode), '备份已恢复。', setError)) {
+    if (await commit(() => repository.restore(incoming.snapshot, mode, historyChoice), '备份已恢复。', setError)) {
       setIncoming(undefined);
       setConfirmation(undefined);
     }
@@ -218,13 +220,15 @@ function Backup({ exportData }: { exportData: (password?: string) => Promise<voi
       <p className="file-name">{incoming.name}</p>
       <dl className="import-counts">
         {([['习惯', 'habits'], ['打卡记录', 'entries'], ['目标', 'goals'], ['专注会话', 'sessions'], ['复盘', 'reviews']] as const)
-          .map(([label, key]) => <div key={key}><dt>{label}</dt><dd>{incoming.snapshot[key].length}</dd></div>)}
+          .map(([label, key]) => <div key={key}><dt>{label}</dt><dd>{incoming.snapshot.journal[key].length}</dd></div>)}
       </dl>
       <fieldset className="pick-field">
         <legend>恢复方式</legend>
-        <label className="check-field"><input type="radio" name="restore" checked={mode === 'merge'} onChange={() => setMode('merge')} />合并记录，冲突时保留更新的一条</label>
+        <label className="check-field"><input type="radio" name="restore" checked={mode === 'merge'} onChange={() => setMode('merge')} />合并记录；学习历史分叉时需选择处理方式</label>
         <label className="check-field"><input type="radio" name="restore" checked={mode === 'replace'} onChange={() => setMode('replace')} />完全替换，包括偏好和计时状态</label>
       </fieldset>
+<p>知识 {incoming.snapshot.memory.nodes.length} 条 · 卡片 {incoming.snapshot.memory.cards.length} 张 · 复习日志 {incoming.snapshot.memory.logs.length} 条 · 附件 {incoming.snapshot.memory.attachments.length} 个</p>
+      <Field label="学习历史冲突策略"><select value={historyChoice??''} onChange={e=>setHistoryChoice(e.target.value as 'local'|'incoming')}><option value="">检测到分叉时停止导入</option><option value="local">保留本地卡片状态</option><option value="incoming">采用导入卡片状态</option></select></Field>
       {!confirmation && error && <p className="form-error" role="alert">{error}</p>}
       <div className="inline-actions">
         <button type="button" className="button primary" disabled={busy} onClick={() => {
@@ -243,7 +247,7 @@ function Backup({ exportData }: { exportData: (password?: string) => Promise<voi
       <form className="dialog-body" onSubmit={async event => {
         event.preventDefault(); setBusy(true); setError('');
         try {
-          if (encrypted) setIncoming({ name: encrypted.name, snapshot: parseBackup(await decryptBackup(encrypted.text, password)) });
+          if (encrypted) setIncoming({ name: encrypted.name, snapshot: parseFull(await decryptBackup(encrypted.text, password)) });
           else await exportData(password);
           setEncrypting(false); setEncrypted(undefined); setPassword('');
         } catch (cause) { setError(cause instanceof Error ? cause.message : '无法处理加密备份。'); }
@@ -260,7 +264,7 @@ function Backup({ exportData }: { exportData: (password?: string) => Promise<voi
     {confirmation && <Dialog title={confirmation === 'replace' ? '替换本地记录' : '清空本地数据'} reduced={reduced} busy={busy}
       onClose={() => setConfirmation(undefined)}>
       <div className="dialog-body">
-        {confirmation === 'replace' ? <p>当前习惯、打卡、专注、目标、复盘及偏好会被所选备份替换。</p>
+        {confirmation === 'replace' ? <p>当前习惯、打卡、知识、卡片、图片、复习、专注、目标及偏好会被所选备份替换。</p>
           : <Field label="输入「清空」确认" wide><input value={word} onChange={event => setWord(event.target.value)} /></Field>}
         {error && <p className="form-error" role="alert">{error}</p>}
         <button type="button" className="text-button" disabled={busy} onClick={() => { void exportData(); }}>先导出备份</button>

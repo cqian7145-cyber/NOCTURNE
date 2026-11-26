@@ -1,0 +1,15 @@
+{
+  "date": "2026-11-26",
+  "version": "3.0.0",
+  "baseline": "67871a947906ee719c9ddd3ec93377fdd8af669b",
+  "unitTests": 50,
+  "browserScenarios": 17,
+  "finalMemoriaScenarios": 6,
+  "performance": {
+    "cards": 10000,
+    "logs": 100000,
+    "browserMs": 864,
+    "searchMs": 289,
+    "analyticsMs": 1417
+  }
+}

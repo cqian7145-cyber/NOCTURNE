@@ -1,3 +1,5 @@
+import {useQuery,memoria} from './memoria';
+import {learningGoalValues} from '../core/memoria/analytics';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { MotionConfig, useReducedMotion } from 'motion/react';
 import { ArrowDownToLine, CircleAlert } from 'lucide-react';
@@ -8,7 +10,7 @@ import { repository } from '../core/repository';
 import { makeStats, type Stats } from '../core/stats';
 import { Toasts, type ToastData } from '../ui/primitives';
 
-const messageOf = (error: unknown) => error instanceof Error
+const messageOf = (error: unknown) => error instanceof Error && error.name==='QuotaExceededError' ? '设备存储已满，请先导出备份并释放空间后重试。' : error instanceof Error
   ? (('issues' in error && Array.isArray(error.issues) && typeof error.issues[0]?.message === 'string') ? error.issues[0].message : error.message)
   : '请重试。';
 
@@ -219,8 +221,10 @@ export function JournalProvider({ children }: { children: ReactNode }) {
     }
   }, [notify]);
 
+  useEffect(()=>{if(data)void memoria.refreshBridge().catch(()=>{});},[data]);
   const { date: today, time } = data ? clock(data.settings.zone, now) : { date: '', time: '' };
-  const stats = useMemo(() => data ? makeStats(data, today) : null, [data, today]);
+  const {value:learning}=useQuery(()=>data?learningGoalValues(memoria.db,data):Promise.resolve({}),[data]);
+  const stats = useMemo(() => data ? makeStats(data, today,learning) : null, [data, today,learning]);
 
   if (loadError) return (
     <main className="startup">

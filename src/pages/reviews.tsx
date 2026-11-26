@@ -1,3 +1,4 @@
+import {StudyReport} from '../ui/memory-integration';
 import { deepWork, period, reviewSummary } from '../core/growth';
 import { useState, type FormEvent } from 'react';
 import { ChevronLeft, ChevronRight, FileText, Minus, Target, TrendingDown, TrendingUp } from 'lucide-react';
@@ -138,6 +139,7 @@ export function Reviews() {
         </section>}
       </div>
       <div className="review-stack">
+        <StudyReport start={start} end={cutoff}/>
         <Notes key={kind + start} type={kind} start={start} saved={saved} />
         {recent.length > 0 && <section className="panel">
           <PanelHeading title="已保存的复盘" />

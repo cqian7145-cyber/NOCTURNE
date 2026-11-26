@@ -1,3 +1,4 @@
+import {memoria,useQuery} from '../app/memoria';
 import { useSearchParams } from 'react-router';
 import { orderGoals } from '../core/growth';
 import { DomainSelect } from '../ui/growth-fields';
@@ -9,11 +10,12 @@ import { dateLabel } from '../core/dates';
 import { goalTypes, type Goal, type GoalFields } from '../core/model';
 import { repository } from '../core/repository';
 import { pct } from '../core/stats';
-import { HabitIcon, useHabitEditor } from '../ui/habits';
+import { HabitIcon } from '../ui/habits';
 import { Dialog, ease, Empty, Field, IconButton, PageHeading, timing } from '../ui/primitives';
 
 function GoalForm({ goal, close }: { goal?: Goal; close: () => void }) {
   const { data, stats, today, commit, reduced } = useJournal();
+  const {value:memory}=useQuery(()=>memoria.overview());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [fields, setFields] = useState<GoalFields>(() => goal ?? {
@@ -27,7 +29,7 @@ function GoalForm({ goal, close }: { goal?: Goal; close: () => void }) {
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!fields.title.trim() || !fields.habitIds.length) {
+    if (!fields.title.trim() || ['count','completionRate','streak'].includes(fields.goalType)&&!fields.habitIds.length) {
       setError('请输入目标名称，并至少关联一项习惯。');
       return;
     }
@@ -45,11 +47,12 @@ function GoalForm({ goal, close }: { goal?: Goal; close: () => void }) {
           onChange={event => set('title', event.target.value)} /></Field>
         <Field label="描述（可选）" wide><textarea rows={2} maxLength={400} value={fields.description}
           onChange={event => set('description', event.target.value)} /></Field>
+        <Field label="学习卡组（学习目标可选）"><select value={fields.studyDeckId??''} onChange={e=>set('studyDeckId',e.target.value||undefined)}><option value="">全部卡组</option>{memory?.decks.map(d=><option key={d.id} value={d.id}>{d.name}</option>)}</select></Field>
         <Field label="目标类型"><select value={fields.goalType} onChange={event => {
           const goalType = event.target.value as GoalFields['goalType'];
           setFields(previous => ({ ...previous, goalType, targetValue: goalType === 'completionRate' ? 80 : 30 }));
         }}>{Object.entries(goalTypes).map(([value, label]) => <option value={value} key={value}>{label}</option>)}</select></Field>
-        <Field label={fields.goalType === 'completionRate' ? '目标完成率（%）' : fields.goalType === 'streak' ? '连续计划天数' : '目标打卡次数'}>
+        <Field label={fields.goalType === 'completionRate' ? '目标完成率（%）' : fields.goalType === 'streak' ? '连续计划天数' : fields.goalType==='studyMinutes'?'目标学习分钟':fields.goalType==='reviews'?'目标正式复习次数':fields.goalType==='matureCards'?'目标成熟卡片数':fields.goalType==='recallRate'?'目标回忆率（%）':'目标打卡次数'}>
           <input required type="number" value={fields.targetValue || ''} min="1" max={fields.goalType === 'completionRate' ? 100 : 100_000}
             onChange={event => set('targetValue', Number(event.target.value))} />
         </Field>
@@ -102,24 +105,24 @@ function GoalForm({ goal, close }: { goal?: Goal; close: () => void }) {
 
 export function Goals() {
   const { stats, data, reduced, commit } = useJournal();
-  const editHabit = useHabitEditor();
+
   const [editor, setEditor] = useState<{ goal?: Goal } | null>(null);
   const [deleting, setDeleting] = useState<Goal | null>(null);
   const [busy, setBusy] = useState(false);
-  const unit = { count: '次', completionRate: '%', streak: '天' };
+  const unit = { count: '次', completionRate: '%', streak: '天',studyMinutes:'分钟',reviews:'次',matureCards:'张',recallRate:'%' };
   const [query, setQuery] = useSearchParams();
-  const creating = query.has('create') && stats.habits.length > 0;
+  const creating = query.has('create');
   const goals = orderGoals([...data.goals].sort((a, b) => b.createdAt.localeCompare(a.createdAt)));
   return <>
     <PageHeading title="目标" description="选定一个可衡量的目标，让每次打卡累积成进度。"
-      action={<button type="button" className="button primary" onClick={() => stats.habits.length ? setEditor({}) : editHabit()}>
-        <Plus size={17} aria-hidden />{stats.habits.length ? '新建目标' : '创建习惯'}
+      action={<button type="button" className="button primary" onClick={() => setEditor({})}>
+        <Plus size={17} aria-hidden />新建目标
       </button>} />
     {goals.length ? <div className="goal-grid">
       {goals.map(({ goal, depth }) => {
         const { value, status, progress, summary } = stats.goalProgress(goal);
         const target = goal.targetValue + unit[goal.goalType];
-        const actual = value === null ? '—' : goal.goalType === 'completionRate' ? pct(value) : value + ' ' + unit[goal.goalType];
+        const actual = value === null ? '—' : ['completionRate','recallRate'].includes(goal.goalType) ? pct(value) : value + ' ' + unit[goal.goalType];
         return <article key={goal.id} className="panel goal-card" data-depth={Math.min(3, depth)}>
           <div className="goal-title">
             <span className="goal-icon"><Target size={21} strokeWidth={1.55} aria-hidden /></span>

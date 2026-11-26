@@ -14,7 +14,7 @@ export function saveWorkSession(data: Snapshot, timer: Timer, end: number, secon
   if (data.sessions.some(item => item.id === timer.id)) return;
   if (data.sessions.length >= 100_000) throw new Error('专注记录已达到容量上限。');
   data.sessions.push({
-    id: timer.id, habitId: timer.habitId, goalId: timer.goalId, domainId: timer.domainId, task: timer.task, mode: timer.mode,
+    id: timer.id, deckId:timer.deckId,nodeId:timer.nodeId, habitId: timer.habitId, goalId: timer.goalId, domainId: timer.domainId, task: timer.task, mode: timer.mode,
     startedAt: new Date(timer.startedAt).toISOString(), endedAt: new Date(Math.max(timer.startedAt, end)).toISOString(),
     plannedSeconds: timer.mode === 'stopwatch' ? seconds : timer.plannedSeconds, actualSeconds: seconds, completed: true,
   });

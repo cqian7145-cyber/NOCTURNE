@@ -1,3 +1,4 @@
+import {MemoryDashboard} from '../ui/memory-integration';
 import { useSearchParams } from 'react-router';
 import { useState } from 'react';
 import { isWork } from '../core/growth';
@@ -55,6 +56,7 @@ export function Dashboard() {
       </div>
     </section>
 
+    <MemoryDashboard/>
     <dl className="dashboard-metrics">
       <div><dt><Flame size={16} aria-hidden />连续全勤</dt><dd>{streak.current} <small>天</small></dd></div>
       <div><dt><TrendingUp size={16} aria-hidden />本周完成率</dt><dd>{pct(week.rate)}</dd></div>

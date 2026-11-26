@@ -8,7 +8,7 @@ export default defineConfig({
   workers: 2,
   globalSetup: './e2e/server.ts',
   timeout: 45_000,
-  reporter: 'list',
+  reporter: [['list'],['json',{outputFile:'test-results/results.json'}]],
   use: {
     ...devices['Desktop Chrome'],
     channel: 'chromium',

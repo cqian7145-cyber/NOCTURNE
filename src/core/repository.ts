@@ -1,4 +1,6 @@
-import Dexie, { liveQuery, type Table } from 'dexie';
+import { liveQuery } from 'dexie';
+import {capture,restoreFull,type FullBackup} from './memoria/exchange';
+import { JournalDatabase } from './database';
 import { addDays, clock, maxDay, validDay } from './dates';
 import { elapsedStopwatch, finishTimer, millisecondsLeft, saveWorkSession } from './focus';
 import {
@@ -7,25 +9,10 @@ import {
 } from './model';
 import { scheduled, weeklyCommitment } from './stats';
 
-type Record = { id: 'current'; value: Snapshot };
 type Mutation<T> = (draft: Snapshot) => T;
 const recordId = 'current';
 const timestamp = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
-
-class JournalDatabase extends Dexie {
-  journal!: Table<Record, string>;
-
-  constructor(name: string) {
-    super(name);
-    this.version(1).stores({ journal: 'id' });
-    this.version(2).stores({ journal: 'id' }).upgrade(transaction => transaction.table<Record>('journal')
-      .toCollection().modify(row => { row.value = snapshotSchema.parse(row.value); }));
-    this.on('populate', async () => {
-      await this.journal.add({ id: recordId, value: emptySnapshot() });
-    });
-  }
-}
 
 function upsert<T extends { id: string }>(items: T[], item: T, max: number) {
   const index = items.findIndex(current => current.id === item.id);
@@ -65,10 +52,14 @@ export function createRepository(name = 'nocturne') {
   }
 
   async function change<T>(mutate: Mutation<T>, write: (result: T) => boolean = () => true): Promise<T> {
-    return db.transaction('rw', db.journal, async () => {
+    return db.transaction('rw', [db.journal,db.studyRules,db.knowledgeNodes], async () => {
       const row = await db.journal.get(recordId);
       const data = row?.value ?? emptySnapshot();
+      const oldHabits=new Set(data.habits.map(h=>h.id)),oldDomains=new Set(data.domains.map(d=>d.id));
       const result = mutate(data);
+      const removedHabits=[...oldHabits].filter(id=>!data.habits.some(h=>h.id===id)),removedDomains=[...oldDomains].filter(id=>!data.domains.some(d=>d.id===id));
+      for(const rule of removedHabits.length?await db.studyRules.toArray():[])if(removedHabits.includes(rule.habitId))await db.studyRules.delete(rule.id);
+      for(const node of removedDomains.length?await db.knowledgeNodes.toArray():[])if(node.domainId&&removedDomains.includes(node.domainId)){delete node.domainId;node.revision++;await db.knowledgeNodes.put(node);}
       if (write(result)) await db.journal.put({ id: recordId, value: data });
       return result;
     });
@@ -86,6 +77,7 @@ export function createRepository(name = 'nocturne') {
 
   return {
     read,
+    database: db,
     connect: () => db.open(),
     observe: () => liveQuery(read),
     close: () => db.close(),
@@ -179,7 +171,7 @@ export function createRepository(name = 'nocturne') {
         const now = timestamp();
         data.goals = data.goals.map(goal => goal.habitIds.includes(habitId)
           ? { ...goal, habitIds: goal.habitIds.filter(h => h !== habitId), updatedAt: now } : goal);
-        removeGoals(data, new Set(data.goals.filter(goal => !goal.habitIds.length).map(goal => goal.id)));
+        removeGoals(data, new Set(data.goals.filter(goal => ['count','completionRate','streak'].includes(goal.goalType)&&!goal.habitIds.length).map(goal => goal.id)));
         data.sessions.forEach(session => { if (session.habitId === habitId) delete session.habitId; });
         if (data.timer?.habitId === habitId) delete data.timer.habitId;
         if (data.reminded) data.reminded.items = data.reminded.items.filter(h => h !== habitId);
@@ -197,7 +189,7 @@ export function createRepository(name = 'nocturne') {
         if (quantity !== undefined && (!Number.isFinite(quantity) || quantity <= 0 || quantity > 1_000_000 || !habit.measurement)) throw new Error('请输入有效的量化记录。');
         if (skipReason && (skipReason.length > 160 || quantity !== undefined)) throw new Error('请输入有效的跳过原因。');
         const done = skipReason ? false : quantity === undefined ? completed : quantity >= habit.measurement!.minimum;
-        const values = { completed: done, quantity, skipReason: skipReason || undefined };
+        const values = { completed: done, quantity, skipReason: skipReason || undefined, source: 'manual' as const };
         const now = timestamp();
         if (entry) Object.assign(entry, values, { updatedAt: now });
         else {
@@ -274,7 +266,7 @@ export function createRepository(name = 'nocturne') {
       const settings = parseSettings(value);
       return change(data => { data.settings = settings; });
     },
-    startTimer(mode: FocusMode, minutes: number, habitId?: string, details?: { goalId?: string; task?: string }) {
+    startTimer(mode: FocusMode, minutes: number, habitId?: string, details?: { goalId?: string; task?: string;deckId?:string;nodeId?:string }) {
       if (mode !== 'stopwatch' && (!Number.isInteger(minutes) || minutes < 1 || minutes > 180)) throw new Error('请输入 1–180 分钟。');
       return change(data => {
         const now = Date.now();
@@ -289,7 +281,7 @@ export function createRepository(name = 'nocturne') {
         const timing = mode === 'stopwatch'
           ? { plannedSeconds: 86_400, remainingMs: 0, deadline: null, elapsedMs: 0, runningSince: now }
           : { plannedSeconds: minutes * 60, remainingMs, deadline: now + remainingMs };
-        data.timer = { id: id(), mode, habitId, goalId: goal?.id, domainId: goal?.domainId ?? habit?.domainId, task, startedAt: now, ...timing };
+        data.timer = { id: id(), deckId:details?.deckId,nodeId:details?.nodeId, mode, habitId, goalId: goal?.id, domainId: goal?.domainId ?? habit?.domainId, task, startedAt: now, ...timing };
       });
     },
     updateTimer(action: 'pause' | 'resume' | 'reset' | 'tick' | 'stop', timerId: string) {
@@ -337,9 +329,10 @@ export function createRepository(name = 'nocturne') {
       }, due => due.length > 0);
     },
     async backup() {
-      return JSON.stringify(await read(), null, 2);
+      return JSON.stringify(await capture(db));
     },
-    restore(imported: Snapshot, mode: 'merge' | 'replace') {
+    restore(imported: Snapshot | FullBackup, mode: 'merge' | 'replace', choice?: 'local'|'incoming') {
+      if(imported.version===3)return restoreFull(db,imported,mode,choice);
       const incoming = snapshotSchema.parse(imported);
       return change(data => {
         const restored = mode === 'merge' ? mergeBackup(data, incoming) : incoming;
@@ -347,7 +340,7 @@ export function createRepository(name = 'nocturne') {
       });
     },
     clear() {
-      return change(data => { Object.assign(data, emptySnapshot()); });
+      return db.transaction('rw',db.tables,async()=>{for(const table of db.tables)await table.clear();await db.journal.put({id:'current',value:emptySnapshot()});});
     },
   };
 }
